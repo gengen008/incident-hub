@@ -43,9 +43,18 @@ export default function DataTable<T extends Record<string, unknown>>({
 
   const sorted = [...data].sort((a, b) => {
     if (!sortKey) return 0
-    const av = a[sortKey] as string
-    const bv = b[sortKey] as string
-    const cmp = String(av ?? '').localeCompare(String(bv ?? ''))
+    const extract = (obj: T): string => {
+      const v = obj[sortKey]
+      if (v === null || v === undefined) return ''
+      if (typeof v === 'object') {
+        const o = v as Record<string, unknown>
+        return String(o.name ?? o.label ?? o.code ?? '')
+      }
+      return String(v)
+    }
+    const av = extract(a)
+    const bv = extract(b)
+    const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' })
     return sortDir === 'asc' ? cmp : -cmp
   })
 

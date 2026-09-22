@@ -41,7 +41,7 @@ export default function Topbar({ notifications = [], markRead, markAllRead, prof
   const pathname = usePathname()
   const router = useRouter()
   const segments = pathname.split('/').filter(Boolean)
-  const unread = notifications.filter(n => !n.read).length
+  const unread = notifications.filter(n => !n.is_read).length
   const [bellOpen, setBellOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const bellRef = useRef<HTMLButtonElement>(null)
@@ -74,7 +74,7 @@ export default function Topbar({ notifications = [], markRead, markAllRead, prof
   }
 
   function handleNotifClick(n: Notification) {
-    if (!n.read) markRead?.(n.id)
+    if (!n.is_read) markRead?.(n.id)
     if (n.link) { router.push(n.link); setBellOpen(false) }
   }
 
@@ -165,11 +165,11 @@ export default function Topbar({ notifications = [], markRead, markAllRead, prof
                   <div
                     key={n.id}
                     onClick={() => handleNotifClick(n)}
-                    className={`flex items-start gap-3 border-b border-slate-100 p-4 transition-colors ${n.link ? 'cursor-pointer' : ''} ${n.read ? 'hover:bg-slate-50' : 'bg-blue-50/30 hover:bg-blue-50/60'} ${idx === notifications.length - 1 ? 'border-none' : ''}`}
+                    className={`flex items-start gap-3 border-b border-slate-100 p-4 transition-colors ${n.link ? 'cursor-pointer' : ''} ${n.is_read ? 'hover:bg-slate-50' : 'bg-blue-50/30 hover:bg-blue-50/60'} ${idx === notifications.length - 1 ? 'border-none' : ''}`}
                   >
-                    <div className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? 'bg-slate-300' : (NOTIF_COLORS[n.type] ?? 'bg-slate-400')}`} />
+                    <div className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.is_read ? 'bg-slate-300' : (NOTIF_COLORS[n.type] ?? 'bg-slate-400')}`} />
                     <div className="flex-1 min-w-0">
-                      <p className={`font-sans text-sm leading-snug ${n.read ? 'font-medium text-slate-600' : 'font-bold text-slate-900'}`}>{n.title}</p>
+                      <p className={`font-sans text-sm leading-snug ${n.is_read ? 'font-medium text-slate-600' : 'font-bold text-slate-900'}`}>{n.title}</p>
                       {n.body && <p className="mt-0.5 line-clamp-2 font-sans text-xs text-slate-500 leading-relaxed">{n.body}</p>}
                       <p className="mt-1 font-mono text-[10px] text-slate-400">{timeAgo(n.created_at)}</p>
                     </div>

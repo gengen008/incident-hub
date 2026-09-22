@@ -55,6 +55,7 @@ export default function IncidentDetailPage() {
   const [statusModal, setStatusModal] = useState(false)
   const [newStatus, setNewStatus] = useState<IncidentStatus>('open')
   const [statusReason, setStatusReason] = useState('')
+  const [resolutionNotes, setResolutionNotes] = useState('')
   const [savingStatus, setSavingStatus] = useState(false)
 
   // Reassign modal
@@ -132,7 +133,10 @@ export default function IncidentDetailPage() {
       .from('incidents')
       .update({
         status: newStatus,
-        ...(newStatus === 'resolved' ? { resolved_at: new Date().toISOString() } : {}),
+        ...(newStatus === 'resolved' ? {
+          resolved_at: new Date().toISOString(),
+          resolution_notes: resolutionNotes.trim() || statusReason.trim(),
+        } : {}),
       })
       .eq('id', incident.id)
 
@@ -149,6 +153,7 @@ export default function IncidentDetailPage() {
     toastSuccess('Status updated', `Incident is now ${newStatus.replace('_', ' ')}`)
     setStatusModal(false)
     setStatusReason('')
+    setResolutionNotes('')
     setSavingStatus(false)
     setReloadKey(k => k + 1)
   }
@@ -491,6 +496,20 @@ export default function IncidentDetailPage() {
               style={{ resize: 'none' }}
             />
           </div>
+
+          {newStatus === 'resolved' && (
+            <div>
+              <label className="field-label">Resolution Notes</label>
+              <textarea
+                value={resolutionNotes}
+                onChange={e => setResolutionNotes(e.target.value)}
+                className="field-input"
+                rows={3}
+                placeholder="How was this resolved? What was the root cause and fix?"
+                style={{ resize: 'none' }}
+              />
+            </div>
+          )}
 
           <div className="flex items-center justify-end gap-3">
             <Button variant="ghost" onClick={() => { setStatusModal(false); setStatusReason('') }}>Cancel</Button>

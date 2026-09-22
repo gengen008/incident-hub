@@ -87,7 +87,7 @@ export default function CommentSection({ incidentId, comments, currentUser, onCo
           const isOwn = c.user_id === currentUser?.id
           const isEditing = editingId === c.id
           return (
-            <div key={c.id} className="px-5 py-4">
+            <div key={c.id} className="group px-5 py-4">
               <div className="flex items-start gap-3">
                 <Avatar name={user?.full_name} url={user?.avatar_url} size="sm" />
                 <div className="flex-1 min-w-0">

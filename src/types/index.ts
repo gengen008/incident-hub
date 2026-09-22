@@ -119,12 +119,10 @@ export interface Notification {
   user_id: string
   type: 'incident_assigned' | 'status_update' | 'comment' | 'mentioned' | 'resolved' | string
   title: string
-  message?: string | null
   body?: string | null
   incident_id?: string | null
   link?: string | null
   is_read: boolean
-  read?: boolean
   created_at: string
 }
 

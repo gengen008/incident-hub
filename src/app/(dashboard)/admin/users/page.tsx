@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Edit2, UserX, KeyRound, Search } from 'lucide-react'
+import { Plus, Edit2, UserX, KeyRound, Search, UserPlus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useProfile } from '@/lib/hooks/useProfile'
 import { isAdmin } from '@/lib/auth'
@@ -35,7 +35,7 @@ export default function UsersPage() {
   const [search, setSearch] = useState('')
 
   // Modals
-  const [modal, setModal] = useState<'edit' | 'deactivate' | 'reset' | null>(null)
+  const [modal, setModal] = useState<'edit' | 'deactivate' | 'reset' | 'invite' | null>(null)
   const [target, setTarget] = useState<UserRow | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -44,6 +44,14 @@ export default function UsersPage() {
   const [editDeptId, setEditDeptId] = useState('')
   const [editFullName, setEditFullName] = useState('')
   const [formError, setFormError] = useState('')
+
+  // Invite form
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [invitePassword, setInvitePassword] = useState('')
+  const [inviteFullName, setInviteFullName] = useState('')
+  const [inviteRole, setInviteRole] = useState<UserRole>('user')
+  const [inviteDeptId, setInviteDeptId] = useState('')
+  const [inviteError, setInviteError] = useState('')
 
   useEffect(() => {
     if (profileLoading) return
@@ -96,6 +104,31 @@ export default function UsersPage() {
     setSaving(false); setModal(null); setReloadKey(k => k + 1)
   }
 
+  async function inviteUser() {
+    setInviteError('')
+    if (!inviteEmail.trim() || !invitePassword || !inviteFullName.trim()) {
+      setInviteError('All fields are required'); return
+    }
+    setSaving(true)
+    const res = await fetch('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: inviteEmail.trim(),
+        password: invitePassword,
+        full_name: inviteFullName.trim(),
+        role: inviteRole,
+        department_id: inviteDeptId || undefined,
+      }),
+    })
+    const json = await res.json()
+    if (!res.ok) { setInviteError(json.error ?? 'Failed to create user'); setSaving(false); return }
+    toastSuccess('User created', inviteEmail)
+    setSaving(false); setModal(null)
+    setInviteEmail(''); setInvitePassword(''); setInviteFullName(''); setInviteRole('user'); setInviteDeptId('')
+    setReloadKey(k => k + 1)
+  }
+
   async function sendPasswordReset() {
     if (!target) return
     setSaving(true)
@@ -123,6 +156,11 @@ export default function UsersPage() {
         title="Users"
         subtitle="Manage user accounts, roles, and department assignments"
         back
+        action={
+          <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => { setInviteError(''); setModal('invite') }}>
+            Add User
+          </Button>
+        }
       />
 
       {/* Search */}
@@ -249,6 +287,42 @@ export default function UsersPage() {
           <div className="flex items-center justify-end gap-3">
             <Button variant="ghost" onClick={() => setModal(null)}>Cancel</Button>
             <Button variant="primary" loading={saving} onClick={sendPasswordReset}>Send Reset Email</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Invite User Modal */}
+      <Modal open={modal === 'invite'} onClose={() => setModal(null)} size="sm" title="Add New User">
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="field-label">Full Name <span className="text-[var(--color-danger)]">*</span></label>
+            <input value={inviteFullName} onChange={e => setInviteFullName(e.target.value)} className="field-input" placeholder="Jane Smith" />
+          </div>
+          <div>
+            <label className="field-label">Email <span className="text-[var(--color-danger)]">*</span></label>
+            <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} className="field-input" type="email" placeholder="jane@company.com" />
+          </div>
+          <div>
+            <label className="field-label">Temporary Password <span className="text-[var(--color-danger)]">*</span></label>
+            <input value={invitePassword} onChange={e => setInvitePassword(e.target.value)} className="field-input" type="password" placeholder="Min 8 characters" />
+          </div>
+          <div>
+            <label className="field-label">Role</label>
+            <select value={inviteRole} onChange={e => setInviteRole(e.target.value as UserRole)} className="field-input">
+              {ROLES.map(r => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="field-label">Department</label>
+            <select value={inviteDeptId} onChange={e => setInviteDeptId(e.target.value)} className="field-input">
+              <option value="">No department</option>
+              {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+          {inviteError && <p className="field-error">{inviteError}</p>}
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <Button variant="ghost" onClick={() => setModal(null)}>Cancel</Button>
+            <Button variant="primary" loading={saving} icon={<UserPlus className="h-4 w-4" />} onClick={inviteUser}>Create User</Button>
           </div>
         </div>
       </Modal>

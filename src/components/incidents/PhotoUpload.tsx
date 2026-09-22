@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Camera, X, ImagePlus, AlertTriangle } from 'lucide-react'
 import { cn, formatFileSize } from '@/lib/utils'
 
@@ -24,6 +24,13 @@ export default function PhotoUpload({
 }: PhotoUploadProps) {
   const [dragOver, setDragOver] = useState(false)
   const [sizeError, setSizeError] = useState('')
+  const [previewUrls, setPreviewUrls] = useState<string[]>([])
+
+  useEffect(() => {
+    const urls = files.map(f => URL.createObjectURL(f))
+    setPreviewUrls(urls)
+    return () => { urls.forEach(u => URL.revokeObjectURL(u)) }
+  }, [files])
 
   const addFiles = useCallback((incoming: FileList | null) => {
     if (!incoming) return
@@ -109,12 +116,10 @@ export default function PhotoUpload({
       {/* Preview grid */}
       {files.length > 0 && (
         <div className="evidence-grid mt-3">
-          {files.map((file, idx) => {
-            const url = URL.createObjectURL(file)
-            return (
+          {files.map((file, idx) => (
               <div key={idx} className="relative group rounded-[var(--radius-md)] overflow-hidden border border-[var(--border-default)] aspect-square bg-[var(--color-ink-6)]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt={file.name} className="h-full w-full object-cover" onLoad={() => URL.revokeObjectURL(url)} />
+                <img src={previewUrls[idx] ?? ''} alt={file.name} className="h-full w-full object-cover" />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
                 <button
                   type="button"
@@ -127,8 +132,7 @@ export default function PhotoUpload({
                   <p className="font-mono text-[9px] text-white truncate">{formatFileSize(file.size)}</p>
                 </div>
               </div>
-            )
-          })}
+          ))}
         </div>
       )}
     </div>

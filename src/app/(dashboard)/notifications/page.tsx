@@ -100,8 +100,8 @@ export default function NotificationsPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-sans text-sm font-semibold text-[var(--color-ink)] mb-0.5">{n.title}</p>
-                  {n.message && (
-                    <p className="font-sans text-xs text-[var(--color-ink-3)] mb-1 line-clamp-2">{n.message}</p>
+                  {n.body && (
+                    <p className="font-sans text-xs text-[var(--color-ink-3)] mb-1 line-clamp-2">{n.body}</p>
                   )}
                   <span
                     className="font-mono text-[10px] text-[var(--color-ink-4)]"
