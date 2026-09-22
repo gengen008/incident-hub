@@ -43,18 +43,18 @@ export function useNotifications(userId?: string) {
 
   const markRead = useCallback(async (id: string) => {
     const supabase = createClient()
-    await supabase.from('notifications').update({ read: true }).eq('id', id)
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+    await supabase.from('notifications').update({ is_read: true }).eq('id', id)
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n))
   }, [])
 
   const markAllRead = useCallback(async () => {
     if (!userId) return
     const supabase = createClient()
-    await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false)
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId).eq('is_read', false)
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
   }, [userId])
 
-  const unreadCount = notifications.filter(n => !n.read).length
+  const unreadCount = notifications.filter(n => !n.is_read).length
 
   return { notifications, loading, unreadCount, markRead, markAllRead, refresh: load }
 }
