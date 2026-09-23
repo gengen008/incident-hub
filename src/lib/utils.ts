@@ -39,6 +39,7 @@ export function statusLabel(status: string): string {
   const map: Record<string, string> = {
     open: 'Open',
     in_progress: 'In Progress',
+    on_hold: 'On Hold',
     resolved: 'Resolved',
     closed: 'Closed',
   }
@@ -50,16 +51,16 @@ export function priorityLabel(priority: string): string {
     low: 'Low',
     medium: 'Medium',
     high: 'High',
-    critical: 'Critical',
+    urgent: 'Urgent',
   }
   return map[priority] ?? priority
 }
 
 export function roleLabel(role: string): string {
   const map: Record<string, string> = {
-    admin: 'Admin',
-    department_head: 'Dept Head',
-    user: 'User',
+    admin: 'Administrator',
+    head: 'Department Head',
+    staff: 'Staff',
   }
   return map[role] ?? role
 }

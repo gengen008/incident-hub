@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   if (profile?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
-  const { email, password, full_name, role, department_id } = body
+  const { email, password, full_name, role, department_id, job_title } = body
 
   if (!email || !password || !full_name) {
     return NextResponse.json({ error: 'email, password, and full_name are required' }, { status: 400 })
@@ -18,6 +18,8 @@ export async function POST(req: NextRequest) {
   if (password.length < 8) {
     return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
   }
+  const validRoles = ['admin', 'head', 'staff']
+  const finalRole = validRoles.includes(role) ? role : 'staff'
 
   const admin = await createAdminClient()
   const { data: created, error } = await admin.auth.admin.createUser({
@@ -31,7 +33,8 @@ export async function POST(req: NextRequest) {
 
   await admin.from('profiles').update({
     full_name,
-    role: role ?? 'user',
+    role: finalRole,
+    job_title: job_title ?? null,
     ...(department_id ? { department_id } : {}),
   }).eq('id', created.user.id)
 

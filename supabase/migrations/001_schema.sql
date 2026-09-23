@@ -1,216 +1,173 @@
--- IncidentHub Schema v1.0
--- Run in Supabase SQL editor
+-- ════════════════════════════════════════════════════════════════
+-- LABIANCA DESK — Schema v1.0
+-- Centralized inter-departmental request & messaging platform
+-- ════════════════════════════════════════════════════════════════
 
--- ── Extensions ──────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- ── Profiles (mirrors auth.users) ───────────────────────────────
-CREATE TABLE IF NOT EXISTS profiles (
-  id          UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  email       TEXT UNIQUE NOT NULL,
-  full_name   TEXT NOT NULL DEFAULT '',
-  phone       TEXT,
-  role        TEXT NOT NULL DEFAULT 'user'
-              CHECK (role IN ('admin', 'department_head', 'user')),
-  is_active   BOOLEAN NOT NULL DEFAULT true,
-  avatar_url  TEXT,
-  department_id UUID,  -- primary department for scoped queries
-  must_change_password BOOLEAN DEFAULT false,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+-- ── Drop legacy incident-app objects ────────────────────────────
+DROP TABLE IF EXISTS incident_status_history CASCADE;
+DROP TABLE IF EXISTS incident_comments       CASCADE;
+DROP TABLE IF EXISTS incident_photos         CASCADE;
+DROP TABLE IF EXISTS incident_number_seq     CASCADE;
+DROP TABLE IF EXISTS incidents               CASCADE;
+DROP TABLE IF EXISTS notification_preferences CASCADE;
+DROP TABLE IF EXISTS notifications           CASCADE;
+DROP TABLE IF EXISTS user_departments        CASCADE;
+-- departments & profiles are recreated below (drop to reset shape)
+DROP TABLE IF EXISTS request_activity        CASCADE;
+DROP TABLE IF EXISTS request_attachments     CASCADE;
+DROP TABLE IF EXISTS requests                CASCADE;
+DROP TABLE IF EXISTS messages                CASCADE;
+DROP TABLE IF EXISTS conversation_members    CASCADE;
+DROP TABLE IF EXISTS conversations           CASCADE;
+DROP TABLE IF EXISTS request_number_seq      CASCADE;
+DROP TABLE IF EXISTS profiles                CASCADE;
+DROP TABLE IF EXISTS departments             CASCADE;
 
 -- ── Departments ──────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS departments (
+CREATE TABLE departments (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name        TEXT UNIQUE NOT NULL,
+  code        TEXT UNIQUE NOT NULL,
   description TEXT,
-  code        TEXT UNIQUE,            -- short 2-4 char code e.g. "IT", "HR"
+  color       TEXT DEFAULT '#015198',
   is_active   BOOLEAN NOT NULL DEFAULT true,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ── User-Department junction ─────────────────────────────────────
-CREATE TABLE IF NOT EXISTS user_departments (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id       UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  department_id UUID NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
-  is_head       BOOLEAN NOT NULL DEFAULT false,
-  joined_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(user_id, department_id)
+-- ── Profiles (mirror of auth.users) ──────────────────────────────
+CREATE TABLE profiles (
+  id            UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email         TEXT UNIQUE NOT NULL,
+  full_name     TEXT NOT NULL DEFAULT '',
+  phone         TEXT,
+  job_title     TEXT,
+  role          TEXT NOT NULL DEFAULT 'staff'
+                CHECK (role IN ('admin','head','staff')),
+  department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+  avatar_url    TEXT,
+  is_active     BOOLEAN NOT NULL DEFAULT true,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ── Incidents ────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS incidents (
-  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  incident_number  TEXT UNIQUE NOT NULL,  -- INC-YYYYMMDD-00001
-  title            TEXT NOT NULL,
-  description      TEXT NOT NULL,
-  category         TEXT NOT NULL DEFAULT 'Other'
-                   CHECK (category IN (
-                     'Equipment Failure','Software Issue','Maintenance',
-                     'Safety','Process','HR','Facility','Security','Other'
-                   )),
-  priority         TEXT NOT NULL DEFAULT 'medium'
-                   CHECK (priority IN ('low','medium','high','critical')),
-  status           TEXT NOT NULL DEFAULT 'open'
-                   CHECK (status IN ('open','in_progress','resolved','closed')),
-  reported_by      UUID NOT NULL REFERENCES profiles(id),
-  assigned_to      UUID REFERENCES profiles(id),
-  department_id    UUID NOT NULL REFERENCES departments(id),
-  affected_systems TEXT,
-  location         TEXT,
+-- ── Request numbering sequence (per day) ─────────────────────────
+CREATE TABLE request_number_seq (
+  date_key TEXT PRIMARY KEY,
+  last_seq INTEGER NOT NULL DEFAULT 0
+);
+
+-- ── Requests ─────────────────────────────────────────────────────
+-- A department/person logs a problem or request that is routed to
+-- a target department and (optionally) a specific person to resolve.
+CREATE TABLE requests (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_number  TEXT UNIQUE NOT NULL,   -- LBD-YYYYMMDD-0001
+  title           TEXT NOT NULL,
+  description     TEXT NOT NULL,
+  category        TEXT NOT NULL DEFAULT 'General'
+                  CHECK (category IN (
+                    'Cold Chain & Equipment','IT & Systems','Facilities & Maintenance',
+                    'Procurement','Logistics & Fleet','Inventory & Supplies',
+                    'HR & Personnel','Finance & Payments','Safety & Security','General'
+                  )),
+  priority        TEXT NOT NULL DEFAULT 'medium'
+                  CHECK (priority IN ('low','medium','high','urgent')),
+  status          TEXT NOT NULL DEFAULT 'open'
+                  CHECK (status IN ('open','in_progress','on_hold','resolved','closed')),
+  raised_by       UUID NOT NULL REFERENCES profiles(id),
+  raised_dept     UUID REFERENCES departments(id),        -- originating dept
+  target_dept     UUID NOT NULL REFERENCES departments(id), -- dept expected to resolve
+  assigned_to     UUID REFERENCES profiles(id),           -- specific owner
+  location        TEXT,
   resolution_notes TEXT,
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-  resolved_at      TIMESTAMPTZ
+  due_date        DATE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at     TIMESTAMPTZ
 );
 
--- ── Incident counter per day (for auto-numbering) ────────────────
-CREATE TABLE IF NOT EXISTS incident_number_seq (
-  date_key TEXT PRIMARY KEY,           -- YYYYMMDD
-  last_seq  INTEGER NOT NULL DEFAULT 0
-);
-
--- ── Incident Photos ──────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS incident_photos (
+-- ── Request activity (unified timeline: comments + status changes) ─
+CREATE TABLE request_activity (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
-  photo_url   TEXT NOT NULL,
-  file_name   TEXT,
-  file_size   INTEGER,
-  uploaded_by UUID NOT NULL REFERENCES profiles(id),
-  uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- ── Incident Comments ────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS incident_comments (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
-  user_id     UUID NOT NULL REFERENCES profiles(id),
-  content     TEXT NOT NULL,
+  request_id  UUID NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+  actor_id    UUID NOT NULL REFERENCES profiles(id),
+  type        TEXT NOT NULL CHECK (type IN ('comment','status_change','assignment','created')),
+  body        TEXT,
+  from_status TEXT,
+  to_status   TEXT,
   is_deleted  BOOLEAN NOT NULL DEFAULT false,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ── Status History (audit trail) ────────────────────────────────
-CREATE TABLE IF NOT EXISTS incident_status_history (
+-- ── Request attachments ──────────────────────────────────────────
+CREATE TABLE request_attachments (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
-  old_status  TEXT,
-  new_status  TEXT NOT NULL,
-  changed_by  UUID NOT NULL REFERENCES profiles(id),
-  reason      TEXT,
-  changed_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- ── Notifications ────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS notifications (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  type        TEXT NOT NULL,  -- 'incident_assigned','status_update','comment','mentioned','resolved'
-  title       TEXT NOT NULL,
-  body        TEXT,
-  incident_id UUID REFERENCES incidents(id) ON DELETE CASCADE,
-  link        TEXT,
-  read        BOOLEAN NOT NULL DEFAULT false,
+  request_id  UUID NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+  url         TEXT NOT NULL,
+  file_name   TEXT,
+  file_size   INTEGER,
+  uploaded_by UUID NOT NULL REFERENCES profiles(id),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ── Notification preferences ─────────────────────────────────────
-CREATE TABLE IF NOT EXISTS notification_preferences (
-  user_id              UUID PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
-  email_assigned       BOOLEAN NOT NULL DEFAULT true,
-  email_status_change  BOOLEAN NOT NULL DEFAULT true,
-  email_comment        BOOLEAN NOT NULL DEFAULT true,
-  email_mentioned      BOOLEAN NOT NULL DEFAULT true,
-  email_resolved       BOOLEAN NOT NULL DEFAULT true,
-  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+-- ── Conversations (messaging) ────────────────────────────────────
+CREATE TABLE conversations (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type        TEXT NOT NULL DEFAULT 'direct'
+              CHECK (type IN ('direct','group')),
+  title       TEXT,                                   -- for group chats
+  created_by  UUID REFERENCES profiles(id),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),     -- bumped on new message
+  last_message_at TIMESTAMPTZ,
+  last_message_preview TEXT
+);
+
+CREATE TABLE conversation_members (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  user_id         UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  last_read_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  joined_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(conversation_id, user_id)
+);
+
+CREATE TABLE messages (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  sender_id       UUID NOT NULL REFERENCES profiles(id),
+  body            TEXT NOT NULL,
+  attachment_url  TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ── Notifications ────────────────────────────────────────────────
+CREATE TABLE notifications (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  type        TEXT NOT NULL,   -- request_assigned, status_update, request_comment, message, mention
+  title       TEXT NOT NULL,
+  body        TEXT,
+  link        TEXT,
+  entity_id   UUID,
+  is_read     BOOLEAN NOT NULL DEFAULT false,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ── Indexes ──────────────────────────────────────────────────────
-CREATE INDEX IF NOT EXISTS idx_incidents_department   ON incidents(department_id);
-CREATE INDEX IF NOT EXISTS idx_incidents_assigned_to  ON incidents(assigned_to);
-CREATE INDEX IF NOT EXISTS idx_incidents_reported_by  ON incidents(reported_by);
-CREATE INDEX IF NOT EXISTS idx_incidents_status       ON incidents(status);
-CREATE INDEX IF NOT EXISTS idx_incidents_priority     ON incidents(priority);
-CREATE INDEX IF NOT EXISTS idx_incidents_created_at   ON incidents(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_user_depts_user        ON user_departments(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_depts_dept        ON user_departments(department_id);
-CREATE INDEX IF NOT EXISTS idx_comments_incident      ON incident_comments(incident_id);
-CREATE INDEX IF NOT EXISTS idx_notifications_user     ON notifications(user_id);
-CREATE INDEX IF NOT EXISTS idx_notifications_read     ON notifications(user_id, read);
-
--- ── Auto-update updated_at trigger ───────────────────────────────
-CREATE OR REPLACE FUNCTION update_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_profiles_updated    BEFORE UPDATE ON profiles    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
-CREATE TRIGGER trg_departments_updated BEFORE UPDATE ON departments  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
-CREATE TRIGGER trg_incidents_updated   BEFORE UPDATE ON incidents    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
-CREATE TRIGGER trg_comments_updated    BEFORE UPDATE ON incident_comments FOR EACH ROW EXECUTE FUNCTION update_updated_at();
-
--- ── Auto-create profile on signup ────────────────────────────────
-CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO profiles (id, email, full_name)
-  VALUES (
-    NEW.id,
-    NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1))
-  )
-  ON CONFLICT (id) DO NOTHING;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE OR REPLACE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
-
--- ── Auto-generate incident numbers ───────────────────────────────
-CREATE OR REPLACE FUNCTION generate_incident_number()
-RETURNS TRIGGER AS $$
-DECLARE
-  v_date TEXT;
-  v_seq  INTEGER;
-BEGIN
-  v_date := to_char(now(), 'YYYYMMDD');
-  INSERT INTO incident_number_seq (date_key, last_seq)
-  VALUES (v_date, 1)
-  ON CONFLICT (date_key) DO UPDATE
-  SET last_seq = incident_number_seq.last_seq + 1
-  RETURNING last_seq INTO v_seq;
-  NEW.incident_number := 'INC-' || v_date || '-' || lpad(v_seq::text, 5, '0');
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_generate_incident_number
-  BEFORE INSERT ON incidents
-  FOR EACH ROW
-  WHEN (NEW.incident_number IS NULL OR NEW.incident_number = '')
-  EXECUTE FUNCTION generate_incident_number();
-
--- ── Default notification preferences on new profile ──────────────
-CREATE OR REPLACE FUNCTION create_default_notif_prefs()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO notification_preferences (user_id)
-  VALUES (NEW.id)
-  ON CONFLICT DO NOTHING;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_default_notif_prefs
-  AFTER INSERT ON profiles
-  FOR EACH ROW EXECUTE FUNCTION create_default_notif_prefs();
+CREATE INDEX idx_profiles_dept        ON profiles(department_id);
+CREATE INDEX idx_requests_target      ON requests(target_dept);
+CREATE INDEX idx_requests_raised      ON requests(raised_by);
+CREATE INDEX idx_requests_assigned    ON requests(assigned_to);
+CREATE INDEX idx_requests_status      ON requests(status);
+CREATE INDEX idx_requests_created     ON requests(created_at DESC);
+CREATE INDEX idx_activity_request     ON request_activity(request_id);
+CREATE INDEX idx_conv_members_user    ON conversation_members(user_id);
+CREATE INDEX idx_conv_members_conv    ON conversation_members(conversation_id);
+CREATE INDEX idx_messages_conv        ON messages(conversation_id, created_at DESC);
+CREATE INDEX idx_notifications_user   ON notifications(user_id, is_read);
+CREATE INDEX idx_conversations_last   ON conversations(last_message_at DESC);

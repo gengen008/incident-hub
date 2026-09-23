@@ -1,166 +1,152 @@
-export type UserRole = 'admin' | 'department_head' | 'user'
+// ── Labianca Desk — domain types ─────────────────────────────────
 
-export type IncidentStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
+export type UserRole = 'admin' | 'head' | 'staff'
 
-export type IncidentPriority = 'low' | 'medium' | 'high' | 'critical'
+export type RequestStatus = 'open' | 'in_progress' | 'on_hold' | 'resolved' | 'closed'
 
-export type IncidentCategory =
-  | 'Equipment Failure'
-  | 'Software Issue'
-  | 'Maintenance'
-  | 'Safety'
-  | 'Process'
-  | 'HR'
-  | 'Facility'
-  | 'Security'
-  | 'Other'
+export type RequestPriority = 'low' | 'medium' | 'high' | 'urgent'
 
-export interface Profile {
-  id: string
-  email: string
-  full_name: string
-  phone?: string | null
-  role: UserRole
-  is_active: boolean
-  avatar_url?: string | null
-  department_id?: string | null
-  must_change_password?: boolean
-  created_at: string
-  updated_at: string
-  department?: Department
-}
+export type RequestCategory =
+  | 'Cold Chain & Equipment'
+  | 'IT & Systems'
+  | 'Facilities & Maintenance'
+  | 'Procurement'
+  | 'Logistics & Fleet'
+  | 'Inventory & Supplies'
+  | 'HR & Personnel'
+  | 'Finance & Payments'
+  | 'Safety & Security'
+  | 'General'
 
 export interface Department {
   id: string
   name: string
+  code: string
   description?: string | null
-  code?: string | null
+  color?: string | null
   is_active: boolean
   created_at: string
   updated_at: string
   member_count?: number
 }
 
-export interface UserDepartment {
+export interface Profile {
   id: string
-  user_id: string
-  department_id: string
-  is_head: boolean
-  joined_at: string
-  department?: Department
-  user?: Profile
+  email: string
+  full_name: string
+  phone?: string | null
+  job_title?: string | null
+  role: UserRole
+  department_id?: string | null
+  avatar_url?: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  department?: Department | null
 }
 
-export interface IncidentPhoto {
+export interface RequestActivity {
   id: string
-  incident_id: string
-  photo_url: string
-  file_name?: string | null
-  file_size?: number | null
-  uploaded_by: string
-  uploaded_at: string
-  uploader?: Profile
-}
-
-export interface IncidentComment {
-  id: string
-  incident_id: string
-  user_id: string
-  content: string
+  request_id: string
+  actor_id: string
+  type: 'comment' | 'status_change' | 'assignment' | 'created'
+  body?: string | null
+  from_status?: string | null
+  to_status?: string | null
   is_deleted: boolean
   created_at: string
   updated_at: string
-  user?: Profile
+  actor?: Profile
 }
 
-export interface IncidentStatusHistory {
+export interface RequestAttachment {
   id: string
-  incident_id: string
-  old_status?: string | null
-  new_status: string
-  changed_by: string
-  reason?: string | null
-  changed_at: string
-  changer?: Profile
+  request_id: string
+  url: string
+  file_name?: string | null
+  file_size?: number | null
+  uploaded_by: string
+  created_at: string
 }
 
-export interface Incident {
+export interface Request {
   id: string
-  incident_number: string
+  request_number: string
   title: string
   description: string
-  additional_notes?: string | null
-  category: IncidentCategory
-  priority: IncidentPriority
-  status: IncidentStatus
-  reported_by: string
+  category: RequestCategory
+  priority: RequestPriority
+  status: RequestStatus
+  raised_by: string
+  raised_dept?: string | null
+  target_dept: string
   assigned_to?: string | null
-  department_id: string
-  affected_systems?: string | null
   location?: string | null
   resolution_notes?: string | null
+  due_date?: string | null
   created_at: string
   updated_at: string
   resolved_at?: string | null
-  reporter?: Profile
-  assignee?: Profile
-  department?: Department
-  photos?: IncidentPhoto[]
-  comments?: IncidentComment[]
-  status_history?: IncidentStatusHistory[]
-  _count?: {
-    photos: number
-    comments: number
-  }
+  raiser?: Profile
+  assignee?: Profile | null
+  raised_department?: Department | null
+  target_department?: Department | null
+  activity?: RequestActivity[]
+  attachments?: RequestAttachment[]
+}
+
+// ── Messaging ────────────────────────────────────────────────────
+export interface Conversation {
+  id: string
+  type: 'direct' | 'group'
+  title?: string | null
+  created_by?: string | null
+  created_at: string
+  updated_at: string
+  last_message_at?: string | null
+  last_message_preview?: string | null
+  members?: ConversationMember[]
+  // client-computed
+  other?: Profile | null
+  display_name?: string
+  unread?: number
+}
+
+export interface ConversationMember {
+  id: string
+  conversation_id: string
+  user_id: string
+  last_read_at: string
+  joined_at: string
+  user?: Profile
+}
+
+export interface Message {
+  id: string
+  conversation_id: string
+  sender_id: string
+  body: string
+  attachment_url?: string | null
+  created_at: string
+  sender?: Profile
 }
 
 export interface Notification {
   id: string
   user_id: string
-  type: 'incident_assigned' | 'status_update' | 'comment' | 'mentioned' | 'resolved' | string
+  type: string
   title: string
   body?: string | null
-  incident_id?: string | null
   link?: string | null
+  entity_id?: string | null
   is_read: boolean
   created_at: string
 }
 
-export interface NotificationPreferences {
-  id?: string
-  user_id: string
-  email_on_assign: boolean
-  email_on_status_change: boolean
-  email_on_comment: boolean
-  email_on_critical: boolean
-  push_on_assign: boolean
-  push_on_status_change: boolean
-  // legacy aliases
-  email_assigned?: boolean
-  email_status_change?: boolean
-  email_comment?: boolean
-  email_mentioned?: boolean
-  email_resolved?: boolean
-}
-
 export interface DashboardStats {
-  total: number
-  open: number
-  in_progress: number
-  resolved: number
-  closed: number
-  critical: number
-  this_month: number
-  avg_resolution_hours?: number
-}
-
-export interface IncidentFilters {
-  search?: string
-  status?: IncidentStatus | ''
-  priority?: IncidentPriority | ''
-  department_id?: string
-  date_from?: string
-  date_to?: string
-  assigned_to?: string
-  reported_by?: string
+  raised_by_me: number
+  assigned_to_me: number
+  open_for_my_dept: number
+  resolved_this_month: number
+  needs_me: number
 }
