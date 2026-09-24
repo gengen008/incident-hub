@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useProfile } from '@/lib/hooks/useProfile'
 import Button from '@/components/ui/Button'
 import PageHeader from '@/components/ui/PageHeader'
+import ImageUpload, { type UploadedImage } from '@/components/ui/ImageUpload'
 import { PageLoader } from '@/components/ui/LoadingSpinner'
 import { toastError, toastSuccess } from '@/lib/toast'
 import type { Department, Profile, RequestCategory, RequestPriority } from '@/types'
@@ -38,6 +39,7 @@ export default function NewRequestPage() {
   const [assignedTo, setAssignedTo] = useState('')
   const [location, setLocation] = useState('')
   const [dueDate, setDueDate] = useState('')
+  const [photos, setPhotos] = useState<UploadedImage[]>([])
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -78,15 +80,23 @@ export default function NewRequestPage() {
 
     if (error) { toastError('Could not submit request', error.message); setSaving(false); return }
 
+    const newId = (data as { id: string }).id
+
+    if (photos.length) {
+      await supabase.from('request_attachments').insert(
+        photos.map(p => ({ request_id: newId, url: p.url, file_name: p.file_name ?? null, file_size: p.file_size ?? null, uploaded_by: profile!.id }))
+      )
+    }
+
     await supabase.from('request_activity').insert({
-      request_id: (data as { id: string }).id,
+      request_id: newId,
       actor_id: profile!.id,
       type: 'created',
       body: 'Request created',
     })
 
     toastSuccess('Request submitted')
-    router.push(`/requests/${(data as { id: string }).id}`)
+    router.push(`/requests/${newId}`)
   }
 
   if (profileLoading) return <PageLoader />
@@ -162,6 +172,12 @@ export default function NewRequestPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="card mb-6">
+        <h3 className="font-display font-bold text-[var(--color-ink)] mb-1">Photos <span className="font-sans text-xs font-normal text-[var(--color-ink-4)]">(optional)</span></h3>
+        <p className="font-sans text-xs text-[var(--color-ink-3)] mb-4">Add photos of the problem — equipment, damage, screens, documents.</p>
+        <ImageUpload value={photos} onChange={setPhotos} folder="requests" maxFiles={6} />
       </div>
 
       <div className="flex justify-end gap-3">

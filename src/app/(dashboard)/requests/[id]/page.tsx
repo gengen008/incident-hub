@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
   Hash, Flag, Building2, User, UserCheck, Calendar, MapPin, Tag,
-  Edit2, MessageSquare, Send, Clock, CheckCircle2, ArrowRightLeft,
+  Edit2, MessageSquare, Send, Clock, CheckCircle2, ArrowRightLeft, ImagePlus, X,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useProfile } from '@/lib/hooks/useProfile'
@@ -14,12 +14,13 @@ import { StatusBadge, PriorityBadge } from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import Avatar from '@/components/ui/Avatar'
 import Modal from '@/components/ui/Modal'
+import ImageUpload, { type UploadedImage } from '@/components/ui/ImageUpload'
 import PageHeader from '@/components/ui/PageHeader'
 import { PageLoader } from '@/components/ui/LoadingSpinner'
 import ErrorState from '@/components/ui/ErrorState'
 import { formatDateTime, formatDate, timeAgo, statusLabel } from '@/lib/utils'
 import { toastError, toastSuccess } from '@/lib/toast'
-import type { Request, RequestActivity, RequestStatus, Profile } from '@/types'
+import type { Request, RequestActivity, RequestStatus, Profile, RequestAttachment } from '@/types'
 
 const STATUS_OPTIONS: { value: RequestStatus; label: string; color: string }[] = [
   { value: 'open', label: 'Open', color: 'oklch(52% 0.22 25)' },
@@ -53,6 +54,8 @@ export default function RequestDetailPage() {
   const [comment, setComment] = useState('')
   const [sending, setSending] = useState(false)
   const [messaging, setMessaging] = useState(false)
+  const [lightbox, setLightbox] = useState<string | null>(null)
+  const [addPhotos, setAddPhotos] = useState(false)
 
   const load = useCallback(async () => {
     if (!id) return
@@ -65,6 +68,7 @@ export default function RequestDetailPage() {
         assignee:profiles!assigned_to(id,full_name,job_title,role),
         target_department:departments!target_dept(id,name,code),
         raised_department:departments!raised_dept(id,name,code),
+        attachments:request_attachments(*),
         activity:request_activity(*, actor:profiles!actor_id(id,full_name,avatar_url,role))`)
       .eq('id', id).single()
     if (err || !data) { setError(true); setLoading(false); return }
@@ -128,6 +132,18 @@ export default function RequestDetailPage() {
     setComment('')
   }
 
+  async function savePhotos(images: UploadedImage[]) {
+    if (!req || !profile || !images.length) return
+    const supabase = createClient()
+    const { error } = await supabase.from('request_attachments').insert(
+      images.map(p => ({ request_id: req.id, url: p.url, file_name: p.file_name ?? null, file_size: p.file_size ?? null, uploaded_by: profile.id }))
+    )
+    if (error) { toastError('Could not attach photos', error.message); return }
+    toastSuccess('Photos added')
+    setAddPhotos(false)
+    setReloadKey(k => k + 1)
+  }
+
   async function messagePerson(otherId?: string | null) {
     if (!otherId || !profile) return
     setMessaging(true)
@@ -183,6 +199,28 @@ export default function RequestDetailPage() {
               <div className="mt-4 rounded-[var(--radius-md)] border border-[oklch(90%_0.04_155)] bg-[oklch(97%_0.03_155)] px-4 py-3">
                 <p className="font-sans text-xs font-bold uppercase tracking-wider text-[oklch(45%_0.15_155)] mb-1 flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5" /> Resolution</p>
                 <p className="font-sans text-sm text-[var(--color-ink-2)] whitespace-pre-wrap">{req.resolution_notes}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Photos */}
+          <div className="panel">
+            <div className="panel-header">
+              <span className="font-display font-bold text-sm text-[var(--color-ink)]">
+                Photos {((req.attachments as RequestAttachment[] | undefined)?.length ?? 0) > 0 && <span className="font-mono text-xs text-[var(--color-ink-3)] ml-1">{(req.attachments as RequestAttachment[]).length}</span>}
+              </span>
+              <button onClick={() => setAddPhotos(true)} className="panel-view-all-btn"><ImagePlus className="h-3.5 w-3.5" /> Add photos</button>
+            </div>
+            {((req.attachments as RequestAttachment[] | undefined)?.length ?? 0) === 0 ? (
+              <p className="px-4 py-6 text-center font-sans text-sm text-[var(--color-ink-3)]">No photos attached yet.</p>
+            ) : (
+              <div className="evidence-grid p-4">
+                {(req.attachments as RequestAttachment[]).map(a => (
+                  <button key={a.id} onClick={() => setLightbox(a.url)} className="relative rounded-[var(--radius-md)] overflow-hidden border border-[var(--border-default)] aspect-square bg-[var(--color-ink-6)]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={a.url} alt={a.file_name ?? 'photo'} className="h-full w-full object-cover" />
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -291,6 +329,22 @@ export default function RequestDetailPage() {
         </div>
       </Modal>
 
+      {/* Lightbox */}
+      {lightbox && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }} onClick={() => setLightbox(null)}>
+          <button className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25" onClick={() => setLightbox(null)}>
+            <X className="h-5 w-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightbox} alt="attachment" className="max-h-[90vh] max-w-full rounded-lg object-contain" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
+
+      {/* Add photos modal */}
+      <Modal open={addPhotos} onClose={() => setAddPhotos(false)} size="md" title="Add photos">
+        <AddPhotosBody onSave={savePhotos} onCancel={() => setAddPhotos(false)} />
+      </Modal>
+
       {/* Reassign modal */}
       <Modal open={reassignModal} onClose={() => setReassignModal(false)} size="sm" title="Reassign request">
         <div className="space-y-5">
@@ -308,6 +362,19 @@ export default function RequestDetailPage() {
         </div>
       </Modal>
     </>
+  )
+}
+
+function AddPhotosBody({ onSave, onCancel }: { onSave: (imgs: UploadedImage[]) => void; onCancel: () => void }) {
+  const [images, setImages] = useState<UploadedImage[]>([])
+  return (
+    <div className="space-y-4">
+      <ImageUpload value={images} onChange={setImages} folder="requests" maxFiles={6} />
+      <div className="flex justify-end gap-3">
+        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button variant="primary" disabled={!images.length} onClick={() => onSave(images)}>Attach {images.length > 0 ? `(${images.length})` : ''}</Button>
+      </div>
+    </div>
   )
 }
 

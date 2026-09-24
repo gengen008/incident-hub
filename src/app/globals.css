@@ -61,7 +61,7 @@
 /* ── Base ────────────────────────────────────────────────────────── */
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
-  html { overflow-x: hidden; }
+  html { overflow-x: hidden; font-size: 17px; }
   body {
     background: var(--surface-page);
     color: var(--color-ink);
@@ -92,6 +92,14 @@
   grid-template-columns: var(--sidebar-width) 1fr;
   grid-template-rows: var(--topbar-height) 1fr;
   min-height: 100vh;
+}
+/* Desktop: lock the shell to the viewport so the sidebar + topbar stay
+   fixed and only the content area scrolls. */
+@media (min-width: 1024px) {
+  .app-shell {
+    height: 100vh;
+    overflow: hidden;
+  }
 }
 @media (max-width: 1023px) {
   .app-shell {

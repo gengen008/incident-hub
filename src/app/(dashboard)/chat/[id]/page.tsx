@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, Send } from 'lucide-react'
+import { ChevronLeft, Send, ImagePlus, Loader2, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useProfile } from '@/lib/hooks/useProfile'
 import Avatar from '@/components/ui/Avatar'
@@ -20,7 +20,10 @@ export default function ChatThreadPage() {
   const [loading, setLoading] = useState(true)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [lightbox, setLightbox] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const markRead = useCallback(async () => {
     if (!id || !profile) return
@@ -67,17 +70,33 @@ export default function ChatThreadPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages])
 
-  async function send() {
-    if (!text.trim() || !profile || !id || sending) return
-    const body = text.trim()
+  async function send(attachmentUrl?: string) {
+    const body = text.trim() || (attachmentUrl ? '📷 Photo' : '')
+    if (!body || !profile || !id || sending) return
     setText(''); setSending(true)
     const supabase = createClient()
-    const { data, error } = await supabase.from('messages').insert({ conversation_id: id, sender_id: profile.id, body })
+    const { data, error } = await supabase.from('messages')
+      .insert({ conversation_id: id, sender_id: profile.id, body, attachment_url: attachmentUrl ?? null })
       .select('*, sender:profiles!sender_id(id,full_name,avatar_url)').single()
     setSending(false)
-    if (error) { setText(body); return }
+    if (error) { setText(body === '📷 Photo' ? '' : body); return }
     setMessages(prev => prev.some(x => x.id === (data as Message).id) ? prev : [...prev, data as Message])
     markRead()
+  }
+
+  async function sendImage(files: FileList | null) {
+    if (!files?.length || uploading) return
+    setUploading(true)
+    const fd = new FormData()
+    fd.append('file', files[0])
+    fd.append('folder', 'chat')
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const json = await res.json()
+      if (res.ok) await send(json.url)
+    } catch { /* network error — leave composer as-is */ }
+    setUploading(false)
+    if (fileRef.current) fileRef.current.value = ''
   }
 
   if (profileLoading || loading) return <PageLoader />
@@ -113,7 +132,11 @@ export default function ChatThreadPage() {
               <div className={`msg-row ${mine ? 'me' : 'them'}`}>
                 <div className="msg-bubble">
                   {!mine && conv?.type === 'group' && <div className="msg-sender">{(m.sender as Profile | undefined)?.full_name}</div>}
-                  {m.body}
+                  {m.attachment_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={m.attachment_url} alt="photo" className="mb-1.5 max-h-56 w-full cursor-pointer rounded-lg object-cover" onClick={() => setLightbox(m.attachment_url!)} />
+                  )}
+                  {(!m.attachment_url || m.body !== '📷 Photo') && m.body}
                   <div className="msg-meta">{time}</div>
                 </div>
               </div>
@@ -123,6 +146,10 @@ export default function ChatThreadPage() {
       </div>
 
       <div className="chat-composer">
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="sr-only" onChange={e => sendImage(e.target.files)} />
+        <button onClick={() => fileRef.current?.click()} disabled={uploading} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-brand-subtle)] text-[var(--color-brand)] disabled:opacity-40" aria-label="Send photo">
+          {uploading ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <ImagePlus className="h-[18px] w-[18px]" />}
+        </button>
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
@@ -130,10 +157,20 @@ export default function ChatThreadPage() {
           rows={1}
           placeholder="Type a message…"
         />
-        <button onClick={send} disabled={!text.trim() || sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-brand)] text-white disabled:opacity-40" aria-label="Send">
+        <button onClick={() => send()} disabled={!text.trim() || sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-brand)] text-white disabled:opacity-40" aria-label="Send">
           <Send className="h-[18px] w-[18px]" />
         </button>
       </div>
+
+      {lightbox && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }} onClick={() => setLightbox(null)}>
+          <button className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25" onClick={() => setLightbox(null)}>
+            <X className="h-5 w-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightbox} alt="photo" className="max-h-[90vh] max-w-full rounded-lg object-contain" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
     </div>
   )
 }
