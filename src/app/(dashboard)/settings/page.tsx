@@ -85,7 +85,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <label className="field-label">Phone</label>
-              <input value={phone} onChange={e => setPhone(e.target.value)} className="field-input" type="tel" placeholder="+233 …" />
+              <input value={phone} onChange={e => setPhone(e.target.value)} className="field-input" type="tel" name="phone" autoComplete="tel" placeholder="+233 …" />
             </div>
           </div>
         </div>
@@ -99,11 +99,11 @@ export default function SettingsPage() {
         <div className="space-y-4">
           <div>
             <label className="field-label">New password</label>
-            <input value={newPassword} onChange={e => setNewPassword(e.target.value)} className="field-input" type="password" placeholder="Min 8 characters" />
+            <input value={newPassword} onChange={e => setNewPassword(e.target.value)} className="field-input" type="password" autoComplete="new-password" placeholder="Min 8 characters" />
           </div>
           <div>
             <label className="field-label">Confirm new password</label>
-            <input value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="field-input" type="password" />
+            <input value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="field-input" type="password" autoComplete="new-password" />
           </div>
           {passwordError && <p className="field-error">{passwordError}</p>}
         </div>

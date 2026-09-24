@@ -314,13 +314,19 @@
   align-items: center;
   gap: 11px;
   padding: 11px 16px;
-  flex: 1;
-  min-flex: 160px;
+  flex: 1 1 200px;
   text-decoration: none;
   color: inherit;
   transition: background 0.1s;
   min-width: 0;
   cursor: pointer;
+}
+/* On narrow screens, stack the quick actions full-width so labels never truncate */
+@media (max-width: 640px) {
+  .cmd-strip { flex-direction: column; }
+  .cmd-strip-action { flex: 1 1 auto; border-bottom: 1.5px solid var(--border-default); }
+  .cmd-strip-action:last-child { border-bottom: none; }
+  .cmd-strip-sep { display: none; }
 }
 .cmd-strip-action:hover { background: oklch(98.5% 0.003 264); }
 .cmd-strip-action-icon {
@@ -461,8 +467,8 @@
   flex-wrap: wrap;
   align-items: center;
 }
-.filter-toolbar select,
-.filter-toolbar input[type="text"] {
+.filter-toolbar > select,
+.filter-toolbar > input[type="text"] {
   height: 36px;
   padding: 0 12px;
   background: white;
@@ -474,8 +480,8 @@
   outline: none;
   transition: border-color 0.15s;
 }
-.filter-toolbar select:focus,
-.filter-toolbar input[type="text"]:focus { border-color: var(--color-brand); }
+.filter-toolbar > select:focus,
+.filter-toolbar > input[type="text"]:focus { border-color: var(--color-brand); }
 .filter-toolbar-search {
   position: relative;
   flex: 1 1 220px;
