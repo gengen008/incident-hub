@@ -24,6 +24,7 @@ export default function ChatThreadPage() {
   const [lightbox, setLightbox] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const channelKey = useRef(Math.random().toString(36).slice(2))
 
   const markRead = useCallback(async () => {
     if (!id || !profile) return
@@ -54,7 +55,7 @@ export default function ChatThreadPage() {
     if (!id || !profile) return
     const supabase = createClient()
     const channel = supabase
-      .channel(`messages:${id}`)
+      .channel(`messages:${id}:${channelKey.current}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${id}` }, async payload => {
         const m = payload.new as Message
         // fetch sender name (payload doesn't include join)

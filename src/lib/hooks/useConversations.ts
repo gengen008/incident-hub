@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Conversation, Profile } from '@/types'
 
 export function useConversations(userId?: string) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
+  const channelKey = useRef(Math.random().toString(36).slice(2))
 
   const load = useCallback(async () => {
     if (!userId) return
@@ -58,7 +59,7 @@ export function useConversations(userId?: string) {
     if (!userId) return
     const supabase = createClient()
     const channel = supabase
-      .channel(`conv-list:${userId}`)
+      .channel(`conv-list:${userId}:${channelKey.current}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, () => load())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversation_members', filter: `user_id=eq.${userId}` }, () => load())
       .subscribe()

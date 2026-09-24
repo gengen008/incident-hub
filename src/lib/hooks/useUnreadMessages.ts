@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 // Counts conversations that have a message newer than the member's last_read_at.
 export function useUnreadMessages(userId?: string) {
   const [count, setCount] = useState(0)
+  const channelKey = useRef(Math.random().toString(36).slice(2))
 
   const refresh = useCallback(async () => {
     if (!userId) return
@@ -28,7 +29,7 @@ export function useUnreadMessages(userId?: string) {
     const supabase = createClient()
     // Any conversation I belong to that gets bumped (new message) triggers a refresh.
     const channel = supabase
-      .channel(`unread:${userId}`)
+      .channel(`unread:${userId}:${channelKey.current}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, () => refresh())
       .subscribe()
     const onFocus = () => refresh()

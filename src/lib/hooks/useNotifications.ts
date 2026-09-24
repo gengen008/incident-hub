@@ -1,12 +1,15 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Notification } from '@/types'
 
 export function useNotifications(userId?: string) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(false)
+  // Unique per hook instance so two mounts (Topbar + Notifications page) never
+  // collide on the same realtime channel topic.
+  const channelKey = useRef(Math.random().toString(36).slice(2))
 
   const load = useCallback(async () => {
     if (!userId) return
@@ -28,7 +31,7 @@ export function useNotifications(userId?: string) {
     if (!userId) return
     const supabase = createClient()
     const channel = supabase
-      .channel(`notifs:${userId}`)
+      .channel(`notifs:${userId}:${channelKey.current}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
