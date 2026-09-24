@@ -1,9 +1,11 @@
-// Labianca Desk — service worker (offline shell + install support)
-const CACHE = 'labianca-desk-v1'
-const SHELL = ['/dashboard', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/labianca-logo.jpg']
+// Labianca Desk — service worker (v2)
+// Deliberately conservative: never serve stale app code. Only provide an
+// offline fallback for navigations and cache a few static brand assets.
+const CACHE = 'labianca-desk-v2'
+const ASSETS = ['/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/labianca-logo.jpg', '/apple-touch-icon.png']
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}))
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).catch(() => {}))
   self.skipWaiting()
 })
 
@@ -18,33 +20,31 @@ self.addEventListener('fetch', (event) => {
   const { request } = event
   if (request.method !== 'GET') return
   const url = new URL(request.url)
-  // Never cache Supabase API / auth / realtime or Next data — always go to network
   if (url.origin !== self.location.origin) return
-  if (url.pathname.startsWith('/api') || url.pathname.startsWith('/_next/data')) return
 
-  // Network-first for navigations so users get fresh data when online,
-  // falling back to the cached shell when offline.
+  // App code and data: ALWAYS go to the network. Never serve a cached JS/RSC
+  // chunk, which would risk a stale-bundle client exception after a deploy.
+  if (
+    url.pathname.startsWith('/_next/') ||
+    url.pathname.startsWith('/api/')
+  ) return
+
+  // Navigations: network-first, fall back to a cached shell only when offline.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
-        .then((res) => {
-          const copy = res.clone()
-          caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {})
-          return res
-        })
-        .catch(() => caches.match(request).then((r) => r || caches.match('/dashboard')))
+      fetch(request).catch(() => caches.match('/offline').then((r) => r || caches.match(request)))
     )
     return
   }
 
-  // Cache-first for static assets
-  if (url.pathname.startsWith('/_next/static') || url.pathname.startsWith('/icon') || url.pathname.endsWith('.png') || url.pathname.endsWith('.jpg')) {
+  // Brand/static images: cache-first (safe, content-addressed or stable).
+  if (ASSETS.includes(url.pathname) || url.pathname.endsWith('.png') || url.pathname.endsWith('.jpg') || url.pathname.endsWith('.webmanifest')) {
     event.respondWith(
       caches.match(request).then((cached) => cached || fetch(request).then((res) => {
         const copy = res.clone()
         caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {})
         return res
-      }))
+      }).catch(() => cached))
     )
   }
 })
